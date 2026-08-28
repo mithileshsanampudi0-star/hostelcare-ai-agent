@@ -16,12 +16,12 @@ CORS(
     resources={
         r"/api/*": {
             "origins": [
-                "https://hostelcare-frontend-679c.onrender.com"
+                "https://hostelcare-frontend-679c.onrender.com",
+                "http://localhost:3000"
             ]
         }
     }
 )
-
 
 app.register_blueprint(complaint_bp)
 app.register_blueprint(ticket_bp)
