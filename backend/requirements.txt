@@ -1,0 +1,8 @@
+groq
+pymongo
+langgraph
+flask
+flask-cors
+python-dotenv
+fpdf2
+apscheduler
