@@ -1,322 +1,686 @@
-# 🏠 HostelCare AI
+# 🏠 HostelCare AI Agent
 
-**Intelligent Hostel Operations & Complaint Management Agent**
-
-HostelCare AI is an agentic system that lets students report hostel maintenance issues in
-plain language (text and/or a photo), and has an LLM-powered agent reason through what to
-do next — check for duplicates, classify and prioritize the issue, assign it to the right
-team, create a ticket, and keep the student updated — instead of following a fixed,
-hardcoded pipeline.
+An intelligent **AI-powered hostel complaint management system** that automatically understands student complaints, classifies issues, assigns them to the appropriate department, prioritizes tickets, detects duplicate complaints, and sends email notifications.
 
 ---
 
-## Table of Contents
+## 🚀 Features
 
-- [Why This Is an Agent, Not Just a Script](#why-this-is-an-agent-not-just-a-script)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Setup](#setup)
-- [Environment Variables](#environment-variables)
-- [Running the App](#running-the-app)
-- [API Reference](#api-reference)
-- [Admin Access](#admin-access)
-- [Known Limitations](#known-limitations)
-- [Future Improvements](#future-improvements)
+### 🤖 AI-Powered Complaint Processing
 
----
+* Natural-language complaint understanding
+* Automatic extraction of:
 
-## Why This Is an Agent, Not Just a Script
+  * Room number
+  * Hostel block
+  * Complaint category
+  * Issue description
+* AI-based priority classification:
 
-Most "AI agent" projects run every input through the same fixed sequence of steps, every
-time — extract, then classify, then prioritize, then assign, in that exact order. That's
-automation *with* an LLM call inside it, not really an agent.
+  * 🔴 High
+  * 🟡 Medium
+  * 🟢 Low
 
-HostelCare AI's core complaint handler works differently. The LLM is given a set of tools
-(`check_existing_ticket`, `create_ticket`, `log_duplicate_report`) and reasons through the
-situation itself, deciding at runtime:
+### 🎫 Smart Ticket Management
 
-```
-Complaint text/photo
-        │
-        ▼
-LLM extracts room, block, category, priority from the complaint
-        │
-        ▼
-LLM calls check_existing_ticket(room, category)
-        │
-        ├── Open ticket already exists?
-        │        │
-        │        ▼
-        │   LLM calls log_duplicate_report(ticket_id)
-        │
-        └── No open ticket?
-                 │
-                 ▼
-            LLM calls create_ticket(...)
-        │
-        ▼
-LLM writes a natural-language reply to the student
+* Automatically creates maintenance tickets
+* Generates unique ticket IDs
+* Tracks ticket status:
+
+  * Pending
+  * In Progress
+  * Resolved
+* Prevents duplicate tickets for the same room and issue
+* Tracks duplicate reports
+
+### 🧠 AI Agent System
+
+HostelCare uses an agent-based workflow to process complaints.
+
+```text
+Student Complaint
+       ↓
+   AI Extraction
+       ↓
+   Classification
+       ↓
+ Priority Analysis
+       ↓
+Duplicate Detection
+       ↓
+Ticket Creation
+       ↓
+Department Assignment
+       ↓
+Email Notification
 ```
 
-The sequence of actions isn't hardcoded — the model decides whether to log a duplicate or
-create a new ticket based on what it actually finds when it checks. This is what lets the
-system genuinely prevent duplicate complaints (a challenge explicitly named in the
-original problem brief) instead of just recording every report as a new ticket.
+### 📧 Email Notifications
 
----
+HostelCare uses **Resend API** for email notifications.
 
-## Features
+Emails can be sent when:
 
-- **Natural language complaint intake** — students describe issues conversationally, no
-  forms or dropdowns
-- **Photo support** — attach a photo of the issue; a vision-capable LLM describes what's
-  wrong and folds that into the same reasoning pipeline
-- **Automatic categorization & prioritization** — plumbing, electrical, wifi, cleaning,
-  furniture, or other; priority determined by urgency/safety rules
-- **Duplicate detection** — the agent checks for an existing open ticket on the same
-  room + category before creating a new one
-- **Automatic team assignment** — tickets are routed to the right maintenance department
-- **Ticket tracking** — students can check status any time by ticket ID
-- **Automated escalation** — a background job bumps stale, unresolved tickets to high
-  priority on its own schedule
-- **Notifications** — in-app notification history per ticket, plus optional email updates
-  (falls back to a simulated console log if SMTP isn't configured)
-- **Admin dashboard** — live ticket table with filters and inline status updates, protected
-  behind a secret-key gate (not visible in normal student navigation)
-- **Analytics** — counts by status/category/priority/block, plus automatic detection of
-  recurring complaints (same room + category reported more than once)
-- **Reports** — downloadable CSV and formatted PDF summaries for hostel administration
+* A ticket is created
+* A duplicate complaint is reported
+* A ticket is resolved
+* A ticket is automatically escalated
 
----
+For development/testing, the application supports simulated email output when `RESEND_API_KEY` is not configured.
 
-## Architecture
+### ⏫ Automatic Escalation
 
-```
-┌─────────────┐        ┌──────────────────┐        ┌─────────────┐
-│   React     │  HTTP  │   Flask Backend   │        │   MongoDB   │
-│  Frontend   │◄──────►│                   │◄──────►│             │
-└─────────────┘        │  ┌─────────────┐  │        └─────────────┘
-                        │  │ Tool-Calling │  │
-                        │  │    Agent     │──┼──► Groq API (LLM + Vision)
-                        │  └─────────────┘  │
-                        │  ┌─────────────┐  │
-                        │  │  Scheduler   │──┼──► Escalation job (every 1 min)
-                        │  └─────────────┘  │
-                        │  ┌─────────────┐  │
-                        │  │Email Service │──┼──► SMTP (or simulated console log)
-                        │  └─────────────┘  │
-                        └───────────────────┘
+Unresolved tickets are periodically checked by the scheduler.
+
+If a ticket remains unresolved beyond the configured threshold:
+
+```text
+Pending Ticket
+      ↓
+Time Threshold Exceeded
+      ↓
+Priority → HIGH
+      ↓
+Escalated → TRUE
+      ↓
+Student Notification
 ```
 
----
+### 🖼️ Image Complaint Support
 
-## Tech Stack
+Students can attach images to complaints.
 
-| Layer | Technology |
-|---|---|
-| LLM / Reasoning | Groq API (`openai/gpt-oss-120b`) |
-| Vision (photo analysis) | Groq API (`qwen/qwen3.6-27b`) |
-| Agent orchestration | Custom tool-calling loop (function calling) |
-| Backend | Flask, Flask-CORS |
-| Database | MongoDB (via PyMongo) |
-| Background jobs | APScheduler |
-| PDF reports | fpdf2 |
-| Email | Python `smtplib` (stdlib, no external dependency) |
-| Frontend | React (Create React App) |
-| Charts | Recharts |
+Supported formats:
 
----
+* JPEG
+* PNG
+* WEBP
 
-## Project Structure
+Maximum image size:
 
+```text
+8 MB
 ```
+
+The AI vision system analyzes the uploaded image and includes the analysis with the complaint.
+
+### 📊 Admin Dashboard
+
+Administrators can view:
+
+* Total tickets
+* Ticket status
+* Complaint categories
+* Priority distribution
+* Hostel block statistics
+* Escalated tickets
+* Recurring complaints
+
+---
+
+# 🛠️ Tech Stack
+
+## Frontend
+
+* React
+* JavaScript
+* Axios
+* CSS
+
+## Backend
+
+* Python
+* Flask
+* Flask-CORS
+* Gunicorn
+
+## AI
+
+* Groq API
+* `openai/gpt-oss-120b`
+* `qwen/qwen3.6-27b`
+* AI tool calling
+* AI agent workflow
+
+## Database
+
+* MongoDB Atlas
+* PyMongo
+
+## Email
+
+* Resend API
+
+## Other
+
+* APScheduler
+* Requests
+* Python-dotenv
+
+## Deployment
+
+* GitHub
+* Render
+
+---
+
+# 📁 Project Structure
+
+```text
 Hostelcare/
+│
 ├── backend/
-│   ├── app.py                     # Flask entry point, registers blueprints + scheduler
-│   ├── config.py                  # env vars: Groq/SMTP/Mongo/admin settings
-│   ├── .env
-│   ├── requirements.txt
 │   │
 │   ├── agent/
-│   │   ├── tool_agent.py          # Core agentic loop (tool-calling reasoning)
-│   │   ├── vision.py              # Photo analysis via Groq vision model
-│   │   └── scheduler.py           # Background escalation job
+│   │   ├── __init__.py
+│   │   ├── assignment.py
+│   │   ├── classification.py
+│   │   ├── extraction.py
+│   │   ├── graph.py
+│   │   ├── groq_client.py
+│   │   ├── priority.py
+│   │   ├── scheduler.py
+│   │   ├── tool_agent.py
+│   │   └── vision.py
 │   │
 │   ├── db/
-│   │   ├── mongo.py               # MongoDB connection
-│   │   ├── tickets.py             # Ticket CRUD, duplicate detection, analytics
-│   │   ├── staff.py                # Department lookup + staff seeding
-│   │   └── notifications.py       # Notification log + email dispatch
-│   │
-│   ├── services/
-│   │   └── email_service.py       # SMTP sending with simulated fallback
+│   │   ├── __init__.py
+│   │   ├── mongo.py
+│   │   ├── notifications.py
+│   │   ├── staff.py
+│   │   └── tickets.py
 │   │
 │   ├── routes/
-│   │   ├── complaint_routes.py    # POST /api/complaint (agent entry point)
-│   │   ├── ticket_routes.py       # GET ticket status + notifications
-│   │   └── admin_routes.py        # Admin ticket list, analytics, reports (key-protected)
+│   │   ├── __init__.py
+│   │   ├── admin_routes.py
+│   │   ├── complaint_routes.py
+│   │   └── ticket_routes.py
 │   │
-│   └── scripts/
-│       └── seed_staff.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   └── email_service.py
+│   │
+│   ├── scripts/
+│   │   └── seed_staff.py
+│   │
+│   ├── app.py
+│   ├── config.py
+│   └── requirements.txt
 │
-└── frontend/
-    └── src/
-        ├── App.js                  # Tab navigation + admin URL gate
-        ├── App.css
-        ├── api/
-        │   └── client.js           # API wrapper (axios)
-        └── components/
-            ├── ComplaintForm.js     # Text + photo + email submission
-            ├── TicketCard.js
-            ├── TicketStatus.js      # Status lookup + notification history
-            ├── AdminGate.js         # PIN entry for admin access
-            └── AdminDashboard.js    # Stats, charts, ticket table, report downloads
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── api/
+│   │   ├── App.js
+│   │   ├── App.css
+│   │   └── index.css
+│   │
+│   ├── package.json
+│   └── package-lock.json
+│
+├── .gitignore
+├── package-lock.json
+└── README.md
 ```
 
 ---
 
-## Setup
+# ⚙️ Local Setup
 
-### Prerequisites
+## 1. Clone the Repository
 
-- Python 3.11+
-- Node.js 20+
-- MongoDB running locally (or a connection string to a hosted instance)
-- A [Groq API key](https://console.groq.com)
+```bash
+git clone https://github.com/mithileshsanampudi0-star/hostelcare-ai-agent.git
+cd hostelcare-ai-agent
+```
 
-### Backend
+---
+
+# 🐍 Backend Setup
+
+Go to the backend directory:
 
 ```bash
 cd backend
-pip install -r requirements.txt
-python scripts/seed_staff.py
 ```
 
-### Frontend
+Create a virtual environment:
 
-```bash
+### Windows
+
+```cmd
+python -m venv venv
+```
+
+Activate it:
+
+```cmd
+venv\Scripts\activate
+```
+
+Install dependencies:
+
+```cmd
+pip install -r requirements.txt
+```
+
+---
+
+# 🔐 Environment Variables
+
+Create:
+
+```text
+backend/.env
+```
+
+Example:
+
+```env
+GROQ_API_KEY=your_groq_api_key
+
+MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/
+
+MONGO_DB_NAME=hostelcare
+
+ADMIN_API_KEY=your_admin_api_key
+
+RESEND_API_KEY=your_resend_api_key
+
+EMAIL_FROM=HostelCare <onboarding@resend.dev>
+
+ESCALATION_THRESHOLD_MINUTES=5
+```
+
+### ⚠️ Important
+
+Never commit `.env` to GitHub.
+
+Your `.gitignore` should contain:
+
+```gitignore
+.env
+venv/
+__pycache__/
+*.pyc
+node_modules/
+build/
+```
+
+---
+
+# 🗄️ MongoDB Atlas
+
+HostelCare uses MongoDB Atlas for production.
+
+Create a MongoDB Atlas cluster and obtain the connection string.
+
+Set:
+
+```env
+MONGO_URI=your_mongodb_atlas_connection_string
+```
+
+Also make sure your MongoDB Atlas network access allows the Render service to connect.
+
+---
+
+# ▶️ Run Backend
+
+From:
+
+```text
+Hostelcare/backend
+```
+
+run:
+
+```cmd
+python app.py
+```
+
+Backend:
+
+```text
+http://localhost:5000
+```
+
+Health check:
+
+```text
+http://localhost:5000/
+```
+
+Expected response:
+
+```json
+{
+  "status": "HostelCare AI backend running"
+}
+```
+
+---
+
+# ⚛️ Frontend Setup
+
+Open another terminal.
+
+From the project root:
+
+```cmd
 cd frontend
+```
+
+Install dependencies:
+
+```cmd
 npm install
 ```
 
----
+Start React:
 
-## Environment Variables
-
-Create `backend/.env`:
-
-```env
-GROQ_API_KEY=your_groq_api_key_here
-MONGO_URI=mongodb://localhost:27017
-MONGO_DB_NAME=hostelcare
-FLASK_PORT=5000
-
-ADMIN_API_KEY=change-this-to-something-private
-ESCALATION_THRESHOLD_MINUTES=4320
-
-# Leave blank to run emails in simulated mode (printed to console).
-# For Gmail: generate an App Password at myaccount.google.com/apppasswords
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASSWORD=
-SMTP_FROM_NAME=HostelCare AI
-```
-
-> **Note:** `ESCALATION_THRESHOLD_MINUTES` controls how long a ticket can sit unresolved
-> before being auto-escalated to high priority. `4320` = 3 days, suitable for production.
-> Lower it (e.g. `2`) temporarily if you want to demo escalation live.
-
----
-
-## Running the App
-
-**Terminal 1 — backend:**
-```bash
-cd backend
-python app.py
-```
-Runs on `http://localhost:5000`
-
-**Terminal 2 — frontend:**
-```bash
-cd frontend
+```cmd
 npm start
 ```
-Runs on `http://localhost:3000`
+
+Frontend:
+
+```text
+http://localhost:3000
+```
 
 ---
 
-## API Reference
+# 🔗 Frontend API Configuration
 
-| Method | Route | Description |
-|---|---|---|
-| `POST` | `/api/complaint` | Submit a complaint (text and/or photo, optional email) → agent reasons and creates/updates a ticket |
-| `GET` | `/api/ticket/<id>` | Get a ticket's current status |
-| `GET` | `/api/ticket/<id>/notifications` | Get the notification history for a ticket |
-| `GET` | `/api/tickets` | List all tickets |
-| `GET` | `/api/admin/tickets` | *(admin key required)* Filterable ticket list |
-| `PATCH` | `/api/admin/tickets/<id>/status` | *(admin key required)* Update ticket status |
-| `GET` | `/api/admin/analytics` | *(admin key required)* Aggregated stats + recurring complaints |
-| `GET` | `/api/admin/report/csv` | *(admin key required)* Download all tickets as CSV |
-| `GET` | `/api/admin/report/pdf` | *(admin key required)* Download a formatted PDF report |
+The frontend uses an environment variable for the backend URL.
 
-Admin routes require an `X-Admin-Key` header (or `?key=` query param for file downloads)
-matching `ADMIN_API_KEY` in `.env`.
+Example:
 
-### Example: submit a complaint
+```javascript
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+```
+
+For local development:
+
+```text
+http://localhost:5000
+```
+
+For production:
+
+```env
+REACT_APP_API_URL=https://hostelcare-ai-agent.onrender.com
+```
+
+---
+
+# 📡 API Endpoints
+
+## Submit Complaint
+
+```http
+POST /api/complaint
+```
+
+Supports:
+
+* JSON requests
+* Multipart form requests
+* Optional image upload
+* Optional student email
+
+---
+
+## Ticket APIs
+
+```text
+/api/tickets
+```
+
+Used for retrieving and managing tickets.
+
+---
+
+## Admin APIs
+
+```text
+/api/admin/...
+```
+
+Used by the administrator dashboard.
+
+---
+
+# 📧 Email Configuration
+
+HostelCare uses Resend instead of SMTP.
+
+Required environment variables:
+
+```env
+RESEND_API_KEY=your_resend_api_key
+EMAIL_FROM=HostelCare <onboarding@resend.dev>
+```
+
+For testing, `onboarding@resend.dev` can be used with Resend's testing restrictions.
+
+For production email delivery to arbitrary student addresses, verify your own domain in Resend and use an address such as:
+
+```env
+EMAIL_FROM=HostelCare <notifications@yourdomain.com>
+```
+
+---
+
+# 🌐 Deployment on Render
+
+HostelCare is deployed as two separate Render services.
+
+## Backend
+
+### Root Directory
+
+```text
+backend
+```
+
+### Build Command
 
 ```bash
-curl -X POST http://localhost:5000/api/complaint \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Bathroom tap in room 204 has been leaking for 3 days"}'
+pip install -r requirements.txt
+```
+
+### Start Command
+
+```bash
+gunicorn app:app
+```
+
+### Environment Variables
+
+Configure these in Render:
+
+```text
+GROQ_API_KEY
+MONGO_URI
+MONGO_DB_NAME
+ADMIN_API_KEY
+RESEND_API_KEY
+EMAIL_FROM
+ESCALATION_THRESHOLD_MINUTES
+```
+
+Backend URL:
+
+```text
+https://hostelcare-ai-agent.onrender.com
 ```
 
 ---
 
-## Admin Access
+# Frontend Deployment
 
-The admin dashboard is intentionally **not** linked anywhere in normal student navigation.
-Access it at:
+Create a Render **Static Site**.
 
+### Root Directory
+
+```text
+frontend
 ```
-http://localhost:3000/?admin=true
+
+### Build Command
+
+```bash
+npm install && npm run build
 ```
 
-You'll be prompted for the admin key (set via `ADMIN_API_KEY` in `.env`). This key is
-validated against the real backend — every `/api/admin/*` route rejects requests without
-it, so hiding the UI tab isn't the only protection; the API itself is gated too.
+### Publish Directory
+
+```text
+build
+```
+
+### Environment Variable
+
+```text
+REACT_APP_API_URL=https://hostelcare-ai-agent.onrender.com
+```
+
+After changing `REACT_APP_API_URL`, rebuild the frontend because React environment variables are included during the production build.
 
 ---
 
-## Known Limitations
+# 🔄 Production Architecture
 
-This is a hackathon/bootcamp-stage MVP. Before any real deployment, it would need:
-
-- **Proper student authentication** — currently there's no login system; email is
-  optionally self-reported per complaint for notifications
-- **Rate limiting** — no protection against spam/abuse on the complaint endpoint
-- **Multi-tenant support** — currently modeled for a single hostel; multiple
-  hostels/campuses would need tenant isolation
-- **Persistent admin sessions** — the admin key is stored in `sessionStorage`, cleared on
-  browser close, with no refresh/rotation mechanism
+```text
+                    ┌─────────────────────┐
+                    │      Student        │
+                    │   React Frontend    │
+                    └──────────┬──────────┘
+                               │
+                               │ HTTPS
+                               ▼
+              ┌────────────────────────────┐
+              │      Render Frontend       │
+              │      React Static Site     │
+              └──────────────┬─────────────┘
+                             │
+                             │ REST API
+                             ▼
+              ┌────────────────────────────┐
+              │      Render Backend        │
+              │       Flask + Gunicorn     │
+              └──────┬─────────┬───────────┘
+                     │         │
+          ┌──────────┘         └───────────┐
+          ▼                                ▼
+ ┌──────────────────┐             ┌──────────────────┐
+ │   MongoDB Atlas  │             │     Groq API     │
+ │     Database     │             │    AI Models     │
+ └──────────────────┘             └──────────────────┘
+                     │
+                     ▼
+             ┌──────────────────┐
+             │    Resend API    │
+             │ Email Notification│
+             └──────────────────┘
+```
 
 ---
 
-## Future Improvements
+# 🔒 Security
 
-- Real-time push notifications (not just email)
-- Multi-language complaint support
-- Predictive maintenance using recurring-complaint patterns to flag at-risk
-  rooms/blocks before failures occur
-- Mobile app / PWA for easier student access
+Do not expose these values publicly:
+
+```text
+GROQ_API_KEY
+MONGO_URI
+RESEND_API_KEY
+ADMIN_API_KEY
+```
+
+Keep them inside:
+
+```text
+.env
+```
+
+for local development and Render Environment Variables for production.
+
+Never commit API keys to GitHub.
+
+If a secret is accidentally committed, revoke it and generate a new one.
 
 ---
 
-## Credits
+# 🧪 Testing
 
-Built for the AI Agent Bootcamp — Smart Hostel Management Agent problem statement.
+Test the backend health endpoint:
 
-Powered by [Groq](https://groq.com) for fast LLM inference and vision.
+```text
+GET /
+```
+
+Expected:
+
+```json
+{
+  "status": "HostelCare AI backend running"
+}
+```
+
+Test complaint submission from the React frontend.
+
+Verify:
+
+1. Complaint reaches Flask backend.
+2. AI processes the complaint.
+3. Ticket is created.
+4. Ticket appears in MongoDB Atlas.
+5. Correct department is assigned.
+6. Email notification is generated/sent.
+7. Duplicate complaints do not create duplicate tickets.
+8. Stale tickets are escalated.
+
+---
+
+# 📈 Future Improvements
+
+* Student authentication
+* Admin authentication with role-based access
+* Real-time ticket updates
+* WhatsApp notifications
+* SMS notifications
+* Hostel-wise analytics
+* Maintenance staff mobile application
+* Better AI-based image diagnosis
+* Complaint sentiment analysis
+* SLA monitoring
+* Advanced analytics dashboard
+
+---
+
+# 👨‍💻 Author
+
+**Mithilesh Sanampudi**
+
+GitHub:
+
+```text
+https://github.com/mithileshsanampudi0-star
+```
+
+Project:
+
+```text
+https://github.com/mithileshsanampudi0-star/hostelcare-ai-agent
+```
+
+---
+
+# 📄 License
+
+This project is developed for educational and project demonstration purposes.
