@@ -26,4 +26,8 @@ if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
     start_scheduler()
 
 if __name__ == "__main__":
-    app.run(debug=True, port=FLASK_PORT)
+    app.run(
+        host="0.0.0.0",
+        port=FLASK_PORT,
+        debug=True
+    )
