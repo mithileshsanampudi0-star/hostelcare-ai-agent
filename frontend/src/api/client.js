@@ -5,7 +5,9 @@ const API_BASE_URL =
 
 const client = axios.create({
   baseURL: API_BASE_URL,
-  headers: { "Content-Type": "application/json" },
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
 client.interceptors.request.use((config) => {
