@@ -2,13 +2,26 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from config import FLASK_PORT
+
 from routes.complaint_routes import complaint_bp
 from routes.ticket_routes import ticket_bp
 from routes.admin_routes import admin_bp
 from agent.scheduler import start_scheduler
 
+
 app = Flask(__name__)
-CORS(app)
+
+CORS(
+    app,
+    resources={
+        r"/api/*": {
+            "origins": [
+                "https://hostelcare-frontend-679c.onrender.com"
+            ]
+        }
+    }
+)
+
 
 app.register_blueprint(complaint_bp)
 app.register_blueprint(ticket_bp)
